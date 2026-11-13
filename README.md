@@ -75,3 +75,28 @@ make lab-docker-stop
 ```
 
 macOS の場合、lab/ssh は OS 同梱の `/usr/sbin/sshd` をそのまま使います (「リモートログイン」を有効にする必要はありません)。
+
+## SSH で収集する (ブランチ demo/ssh-reference の参考実装)
+
+インベントリの装置ごとに `protocol = ssh` と認証方式を指定します (Telnet の装置と混在可)。
+
+```ini
+[TKY-ENB-0001]
+host = 10.10.1.21
+protocol = ssh                     # telnet (既定) | ssh。port の既定は 23 / 22
+auth = password                    # password | key
+user = cbtadmin
+password = ${CBT_PASSWORD}
+known_hosts = /etc/cbt/known_hosts # 任意
+model = AX-4000
+sw = R5.2.1
+enable_password = ${CBT_ENABLE_PASSWORD}
+```
+
+公開鍵認証は `auth = key` と `key_file = <秘密鍵のパス>`。相対パスはリポジトリのルートから解決します。
+
+```sh
+make lab-ssh-start && make collect-ssh          # lab/ssh (公開鍵)
+make lab-docker-start && make collect-docker    # lab/docker (パスワード + 公開鍵)
+make test                                       # 起動中の SSH ラボがあれば SSH のテストも実行
+```

@@ -19,6 +19,12 @@ sub collect {
     my $s = CBT::Session->new(
         host            => $dev->{host},
         port            => $dev->{port},
+        protocol        => $dev->{protocol} || 'telnet',
+        user            => $dev->{user},
+        password        => $dev->{password},
+        auth            => $dev->{auth},
+        key_file        => $dev->{key_file},
+        known_hosts     => $dev->{known_hosts},
         timeout         => $self->{timeout},
         log             => $self->{session_log},
         prompt          => $self->prompt,

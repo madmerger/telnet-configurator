@@ -47,7 +47,10 @@ for my $dev (@$devices) {
     my $dir     = "$o{outdir}/$dev->{name}";
     my $file    = "$dir/$dev->{name}_$ts.cfg";
     make_path($dir);
-    printf "%-14s %-8s %-12s %s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw}, $dev->{host}, $dev->{port} || 23;
+    for my $k (qw(key_file known_hosts)) {
+        $dev->{$k} = "$ROOT/$dev->{$k}" if $dev->{$k} && $dev->{$k} !~ m{^/};
+    }
+    printf "%-14s %-8s %-12s %-6s %s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw}, $dev->{protocol}, $dev->{host}, $dev->{port};
 
     my $ok = eval {
         die "no collector for $key\n" unless $handler;
@@ -60,7 +63,11 @@ for my $dev (@$devices) {
             close $out;
         }
         else {
-            system( $^X, $handler->{script}, @{$dev}{qw(host port user password)}, $file ) == 0
+            my @opts = $dev->{protocol} eq 'ssh'
+              ? ( '--ssh', ( $dev->{auth} eq 'key' ? ( '--key', $dev->{key_file} ) : () ),
+                  ( $dev->{known_hosts} ? ( '--known-hosts', $dev->{known_hosts} ) : () ) )
+              : ();
+            system( $^X, $handler->{script}, @opts, @{$dev}{qw(host port user)}, $dev->{password} // '', $file ) == 0
               or die "collector script exited with status " . ( $? >> 8 ) . "\n";
         }
         1;

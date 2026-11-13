@@ -87,7 +87,7 @@ make test
 
 - Devin の作業が時間内に終わらない / 方向がずれた場合: ブランチ `demo/ssh-reference` が移行後の参考実装 (Net::OpenSSH、パスワード / 公開鍵、Telnet との切り替え、SSH テスト付き)。`git diff main..demo/ssh-reference` で「Devin が出す PR はこういう形」と見せる。
 - Docker が使えない環境: lab/ssh (公開鍵) だけでデモできる。パスワード認証は参考実装のテスト結果で説明する。
-- `make test` は SSH ラボが起動していなければ SSH のテストをスキップする (参考実装の場合)。
+- `make test` は SSH ラボが起動していなければ SSH のテストをスキップする。
 
 ## 想定 Q&A
 
