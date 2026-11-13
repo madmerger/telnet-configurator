@@ -1,0 +1,102 @@
+#!/usr/bin/env perl
+# CBT: collect configuration from base stations listed in an inventory.
+#
+#   bin/cbt-collect -i conf/devices.local.conf            # all devices
+#   bin/cbt-collect -i conf/devices.local.conf -d TKY-ENB-0001
+#
+# Output: OUTDIR/<device>/<device>_<YYYYmmdd-HHMMSS>.cfg and OUTDIR/<device>/latest.cfg
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::RealBin/../lib";
+use Getopt::Long;
+use File::Path qw(make_path);
+use File::Copy qw(copy);
+use POSIX qw(strftime);
+use Cwd ();
+use CBT::Inventory;
+
+my $ROOT = Cwd::abs_path("$FindBin::RealBin/..");
+
+# Which collector handles which model / software version.
+my %HANDLERS = (
+    'AX-4000:R5' => { module => 'CBT::Collector::AX4000_R5' },
+    'AX-4000:R6' => { module => 'CBT::Collector::AX4000_R6' },
+    'BG-7:V200'  => { script => "$ROOT/collectors/bg7_v200.pl" },
+);
+
+my %o = ( inventory => "$ROOT/conf/devices.conf", outdir => "$ROOT/output", logdir => "$ROOT/log", timeout => 20 );
+GetOptions( \%o, 'inventory|i=s', 'device|d=s@', 'outdir|o=s', 'logdir=s', 'timeout=i', 'help|h' )
+  or usage();
+usage() if $o{help};
+
+my $devices = CBT::Inventory->load( $o{inventory} );
+if ( $o{device} ) {
+    my %want = map { $_ => 1 } @{ $o{device} };
+    $devices = [ grep { $want{ $_->{name} } } @$devices ];
+    die "no matching devices in $o{inventory}\n" unless @$devices;
+}
+
+make_path( $o{outdir}, $o{logdir} );
+my $ts = strftime( '%Y%m%d-%H%M%S', localtime );
+my @failed;
+
+for my $dev (@$devices) {
+    my $key     = "$dev->{model}:" . ( $dev->{sw} =~ /^([A-Z]+\d+)/ ? $1 : $dev->{sw} );
+    my $handler = $HANDLERS{$key};
+    my $dir     = "$o{outdir}/$dev->{name}";
+    my $file    = "$dir/$dev->{name}_$ts.cfg";
+    make_path($dir);
+    printf "%-14s %-8s %-12s %s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw}, $dev->{host}, $dev->{port} || 23;
+
+    my $ok = eval {
+        die "no collector for $key\n" unless $handler;
+        if ( $handler->{module} ) {
+            eval "require $handler->{module}; 1" or die $@;
+            my $c = $handler->{module}->new( timeout => $o{timeout}, session_log => "$o{logdir}/$dev->{name}.session.log" );
+            my $sections = $c->collect($dev);
+            open my $out, '>', $file or die "cannot write $file: $!\n";
+            print $out "!! ===== $_->[0] =====\n", $_->[1] for @$sections;
+            close $out;
+        }
+        else {
+            system( $^X, $handler->{script}, @{$dev}{qw(host port user password)}, $file ) == 0
+              or die "collector script exited with status " . ( $? >> 8 ) . "\n";
+        }
+        1;
+    };
+    if ($ok) {
+        my $header = "!! CBT collected $dev->{name} ($dev->{model} $dev->{sw}) at $ts\n";
+        prepend( $file, $header );
+        copy( $file, "$dir/latest.cfg" );
+        my $lines = () = do { open my $fh, '<', $file; <$fh> };
+        print "OK ($lines lines) -> $file\n";
+    }
+    else {
+        my $err = $@ || "unknown error\n";
+        print "FAILED: $err";
+        unlink $file;
+        push @failed, $dev->{name};
+    }
+}
+
+printf "\n%d/%d devices collected\n", @$devices - @failed, scalar @$devices;
+exit( @failed ? 1 : 0 );
+
+sub prepend {
+    my ( $file, $text ) = @_;
+    open my $in, '<', $file or die "$file: $!";
+    local $/;
+    my $body = <$in>;
+    close $in;
+    open my $out, '>', $file or die "$file: $!";
+    print $out $text, $body;
+    close $out;
+}
+
+sub usage {
+    print <<"END";
+usage: $0 [-i INVENTORY] [-d DEVICE ...] [-o OUTDIR] [--timeout SEC]
+END
+    exit 2;
+}
