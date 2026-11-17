@@ -1,11 +1,16 @@
 package CBT::Session;
-# Telnet session to a base station: login, privileged mode, command execution.
+# Session to a base station: login, privileged mode, command execution.
+# protocol => 'ssh' returns a CBT::Session::SSH; otherwise Telnet (Net::Telnet).
 use strict;
 use warnings;
-use Net::Telnet;
 
 sub new {
     my ( $class, %a ) = @_;
+    if ( ( $a{protocol} // 'telnet' ) eq 'ssh' ) {
+        require CBT::Session::SSH;
+        return CBT::Session::SSH->new(%a);
+    }
+    require Net::Telnet;
     my $t = Net::Telnet->new(
         Timeout => $a{timeout} || 20,
         Errmode => 'return',
