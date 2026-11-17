@@ -36,12 +36,19 @@ export default function ComparePanel({ initialDevices, revision }: Props) {
   useEffect(() => {
     api
       .storedDevices()
-      .then((list) => {
+      .then(async (list) => {
         setStored(list)
         const names = list.map((s) => s.device)
         const initial = initialDevices.filter((d) => names.includes(d))
-        const chosen = initial.length >= 2 ? initial : names.slice(0, 2)
-        setPicks(chosen.map((device) => ({ device, snapshot: 'latest' })))
+        const latest = (device: string): Pick => ({ device, snapshot: 'latest' })
+        let chosen = (initial.length >= 2 ? initial : names.slice(0, 2)).map(latest)
+        const single = initial.length === 1 ? initial[0] : names.length === 1 ? names[0] : null
+        const history = list.find((s) => s.device === single)
+        if (history && history.snapshots >= 2) {
+          const snaps = await api.snapshots(history.device)
+          chosen = [{ device: history.device, snapshot: snaps[1].id }, latest(history.device)]
+        }
+        setPicks(chosen)
         setBase(0)
         setResult(null)
       })
@@ -82,10 +89,10 @@ export default function ComparePanel({ initialDevices, revision }: Props) {
     }
   }
 
-  if (stored.length < 2 && !error)
+  if (stored.reduce((n, s) => n + s.snapshots, 0) < 2 && !error)
     return (
       <section className="panel">
-        <p className="muted">比較には収集済みのコンフィグが 2 件以上必要です。</p>
+        <p className="muted">比較には収集済みのコンフィグが 2 件以上必要です (同じ装置の履歴 2 件でも可)。</p>
       </section>
     )
 
