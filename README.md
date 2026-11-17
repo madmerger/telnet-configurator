@@ -107,3 +107,33 @@ make test                                       # 起動中のラボに対して
 ```
 
 `t/30_collect_ssh.t` は、各ラボ・各認証方式で収集結果が装置の出力と一致することに加え、Net::Telnet がある環境では Telnet で収集した結果と SSH の結果が一致すること (移行前後の比較) と、Telnet / SSH 混在インベントリを確認します。
+
+## ウェブアプリ (Python バックエンド + React)
+
+`backend/` は `bin/cbt-collect` と同じ収集処理 (インベントリ・Telnet/SSH セッション・機種別コレクタ・保存形式) を Python に移植したもので、
+`web/` はそれを操作する React アプリです。ブラウザから次のことができます。
+
+- インベントリと接続先デバイスを選び、接続してコンフィグを収集 (複数台は並列)。パスワードは画面から一時的に入力も可能 (保存しない)
+- 収集したコンフィグをコマンドごとに表示・検索、過去の収集結果の選択、ダウンロード、セッションログ (パスワードはマスク) の確認
+- 複数デバイス (または同じ装置の過去分) のコンフィグを、基準を 1 台選んでコマンドごとに左右比較。ホスト名の違いは無視可能
+
+```sh
+pip install -r backend/requirements.txt   # starlette, uvicorn
+make sim-start                             # 接続先 (Telnet シミュレータ)。SSH は make lab-ssh-start
+make web-api                               # API: http://127.0.0.1:8000
+make web-dev                               # 画面: http://127.0.0.1:5173 (/api を web-api へ転送)
+make web-build                             # 本番用: web/dist を作ると web-api が http://127.0.0.1:8000/ で配信
+make test-py                               # バックエンドのテスト (シミュレータは自動で起動、SSH はラボ起動時のみ)
+```
+
+CLI も Perl 版と同じ使い方です: `PYTHONPATH=backend python3 -m cbt collect -i conf/devices.local.conf`。
+収集結果は Perl 版と共通の `output/<装置名>/<日時>.cfg` / `latest.cfg`、ログは `log/` に保存されます。
+
+| API | 内容 |
+| --- | --- |
+| `GET /api/inventories` | `conf/*.conf` の一覧 |
+| `GET /api/devices?inventory=...` | 装置一覧 (パスワードは返さない) と最終収集日時 |
+| `POST /api/collect` | `{"inventory", "devices": [...], "password"?, "enable_password"?}` で収集 |
+| `GET /api/configs[/{装置}[/{日時\|latest}[/raw]]]` | 収集済み装置・履歴・コンフィグ (コマンド単位) |
+| `GET /api/logs/{装置}` | 直近のセッションログ |
+| `POST /api/compare` | `{"items": [{"device", "snapshot"}...], "base", "mask_hostname"}` でコマンド単位の差分 |

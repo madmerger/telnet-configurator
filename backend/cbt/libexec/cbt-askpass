@@ -1,0 +1,4 @@
+#!/bin/sh
+# SSH_ASKPASS helper for cbt.session.SSHSession: answers ssh's password prompt with the
+# secret passed in the environment, so the password never appears on a command line.
+printf '%s\n' "${CBT_SSH_ASKPASS_SECRET-}"
