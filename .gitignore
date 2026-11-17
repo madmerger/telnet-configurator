@@ -2,3 +2,4 @@
 /log/
 /.run/
 /lab/.state/
+__pycache__/
