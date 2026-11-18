@@ -104,12 +104,18 @@ sub waitfor {
     @res = map { _re($_) } @res;
     my $deadline = time + $self->{timeout};
     while (1) {
+        # Like Net::Telnet, the match that starts earliest in the buffer wins, so a
+        # "% Bad enable password" line is not hidden by the prompt printed after it.
+        my $best;
         for my $i ( 0 .. $#res ) {
-            if ( $self->{buf} =~ $res[$i] ) {
-                my ( $pre, $match ) = ( substr( $self->{buf}, 0, $-[0] ), $& );
-                substr( $self->{buf}, 0, $+[0] ) = '';
-                return ( $pre, $match, $i );
-            }
+            next unless $self->{buf} =~ $res[$i];
+            $best = [ $i, $-[0], $+[0] ] if !$best || $-[0] < $best->[1];
+        }
+        if ($best) {
+            my ( $i, $from, $to ) = @$best;
+            my ( $pre, $match ) = ( substr( $self->{buf}, 0, $from ), substr( $self->{buf}, $from, $to - $from ) );
+            substr( $self->{buf}, 0, $to ) = '';
+            return ( $pre, $match, $i );
         }
         my $left = $deadline - time;
         if ( $left <= 0 ) { $self->{errmsg} = 'timed out waiting for the device'; return }
@@ -122,7 +128,7 @@ sub _read {
     my $sel = IO::Select->new( grep { defined } @{$self}{qw(fh errfh)} );
     for my $fh ( $sel->can_read($wait) ) {
         my $n = sysread $fh, my $data, 65536;
-        if ( $fh == $self->{errfh} ) {
+        if ( defined $self->{errfh} && $fh == $self->{errfh} ) {
             if   ($n) { $self->{stderr} .= $data }
             else      { CORE::close $fh; $self->{errfh} = undef }
             next;

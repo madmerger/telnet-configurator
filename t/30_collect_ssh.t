@@ -129,6 +129,14 @@ subtest 'unknown host key is refused with host_key_check = yes' => sub {
     like $stdout, qr/FAILED: ssh connect to .*Host key verification failed/, 'host key verification';
 };
 
+subtest 'wrong enable password is reported over SSH' => sub {
+    plan skip_all => 'lab/ssh is not running (make lab-ssh-start)' unless lab_ready('lab/ssh');
+    my ($dev) = ssh_devices( 'lab/ssh', auth => 'publickey', key_file => $KEY, enable_password => 'wrong' );
+    my ( $rc, $stdout ) = run_collect( write_inventory($dev) );
+    isnt $rc, 0, 'non-zero exit';
+    like $stdout, qr/TKY-ENB-0001.*FAILED: enable failed/, 'enable failure is not mistaken for success';
+};
+
 subtest 'Telnet and SSH collect the same configuration' => sub {
     plan skip_all => 'Net::Telnet is not installed' unless have_net_telnet();
     plan skip_all => 'no SSH lab is running' unless %collected;
