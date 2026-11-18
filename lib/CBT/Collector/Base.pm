@@ -24,6 +24,7 @@ sub collect {
         prompt          => $self->prompt,
         login_prompt    => $self->login_prompt,
         password_prompt => $self->password_prompt,
+        map { ( $_ => $dev->{$_} ) } qw(protocol user password auth key_file host_key_check known_hosts),
     );
     $s->login( $dev->{user}, $dev->{password} );
     $s->enable( $self->enable_cmd, $dev->{enable_password} ) if $self->enable_cmd;

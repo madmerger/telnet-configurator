@@ -1,13 +1,15 @@
 # CBT config collector demo. All targets run against localhost only.
 PERL ?= perl
 
-.PHONY: help deps sim-start sim-stop collect test lab-ssh-start lab-ssh-stop lab-docker-start lab-docker-stop clean
+.PHONY: help deps sim-start sim-stop collect collect-ssh test lab-ssh-start lab-ssh-stop lab-docker-start lab-docker-stop clean
 
 help:
 	@echo "make deps              install Perl modules (cpanm)"
 	@echo "make sim-start         start the Telnet device simulator (127.0.0.1:2301-2303)"
-	@echo "make collect           collect configs from the simulator into output/"
-	@echo "make test              run the test suite (starts its own simulator)"
+	@echo "make collect           collect configs from the simulator into output/ (Telnet)"
+	@echo "make collect-ssh       collect over SSH from lab/ssh + lab/docker (conf/devices.local-ssh.conf)"
+	@echo "                       secrets via env: CBT_PASSWORD, CBT_ENABLE_PASSWORD, CBT_SSH_KEY (lab defaults)"
+	@echo "make test              run the test suite (starts its own simulator; SSH tests run if the labs are up)"
 	@echo "make lab-ssh-start     private sshd lab, key auth   (127.0.0.1:2201-2203)"
 	@echo "make lab-docker-start  Docker sshd lab, password+key (127.0.0.1:2401-2403)"
 	@echo "make sim-stop | lab-ssh-stop | lab-docker-stop | clean"
@@ -25,6 +27,13 @@ sim-stop:
 
 collect:
 	$(PERL) bin/cbt-collect -i conf/devices.local.conf
+
+# Lab defaults; override by exporting the variables.
+collect-ssh: export CBT_PASSWORD ?= cbt-pass
+collect-ssh: export CBT_ENABLE_PASSWORD ?= cbt-enable
+collect-ssh: export CBT_SSH_KEY ?= $(CURDIR)/lab/.state/cbt_id_ed25519
+collect-ssh:
+	$(PERL) bin/cbt-collect -i conf/devices.local-ssh.conf
 
 test:
 	prove -lr t
