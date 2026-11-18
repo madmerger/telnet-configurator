@@ -1,0 +1,4 @@
+#!/usr/bin/env perl
+# SSH_ASKPASS helper for CBT::Session::SSH: answers ssh's password prompt with the
+# secret passed in the environment, so the password never appears on a command line.
+print $ENV{CBT_SSH_ASKPASS_SECRET} // '', "\n";

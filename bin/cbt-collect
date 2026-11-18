@@ -9,6 +9,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";
+BEGIN { push @INC, "$FindBin::RealBin/../vendor/fallback" }    # used only if Net::Telnet is not installed
 use Getopt::Long;
 use File::Path qw(make_path);
 use File::Copy qw(copy);
@@ -47,7 +48,8 @@ for my $dev (@$devices) {
     my $dir     = "$o{outdir}/$dev->{name}";
     my $file    = "$dir/$dev->{name}_$ts.cfg";
     make_path($dir);
-    printf "%-14s %-8s %-12s %s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw}, $dev->{host}, $dev->{port} || 23;
+    printf "%-14s %-8s %-12s %s://%s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw}, $dev->{protocol}, $dev->{host},
+      $dev->{port};
 
     my $ok = eval {
         die "no collector for $key\n" unless $handler;
@@ -60,8 +62,22 @@ for my $dev (@$devices) {
             close $out;
         }
         else {
-            system( $^X, $handler->{script}, @{$dev}{qw(host port user password)}, $file ) == 0
-              or die "collector script exited with status " . ( $? >> 8 ) . "\n";
+            # The password goes through the environment, not the command line (visible in ps).
+            local $ENV{CBT_DEVICE_PASSWORD} = $dev->{password} // '';
+            my @opt = ( '--protocol', $dev->{protocol}, '--timeout', $o{timeout} );
+            push @opt, '--auth', $dev->{auth}, '--host-key-check', $dev->{host_key_check},
+              '--log', "$o{logdir}/$dev->{name}.session.log",
+              map { defined $dev->{$_} ? ( "--$_" =~ tr/_/-/r, $dev->{$_} ) : () } qw(key_file known_hosts)
+              if $dev->{protocol} eq 'ssh';
+            my $errlog = "$o{logdir}/$dev->{name}.collector.log";
+            open my $saved, '>&', \*STDERR or die "dup stderr: $!\n";
+            open STDERR, '>', $errlog or die "cannot write $errlog: $!\n";
+            my $rc = system( $^X, $handler->{script}, @opt, @{$dev}{qw(host port user)}, '-', $file );
+            open STDERR, '>&', $saved or die "restore stderr: $!\n";
+            if ( $rc != 0 ) {
+                my ($last) = reverse grep { /\S/ } do { open my $fh, '<', $errlog; <$fh> };
+                die $last // "collector script exited with status " . ( $? >> 8 ) . "\n";
+            }
         }
         1;
     };
