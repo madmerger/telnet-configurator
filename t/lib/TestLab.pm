@@ -10,7 +10,8 @@ use Exporter 'import';
 use lib "$FindBin::Bin/../sim/lib";
 use BSSim::Profile;
 
-our @EXPORT_OK = qw(root free_port start_telnet_sim write_inventory run_collect expected_sections parse_sections wait_port);
+our @EXPORT_OK = qw(root free_port start_telnet_sim write_inventory run_collect expected_sections parse_sections wait_port
+  port_open have_net_telnet);
 our $ROOT = "$FindBin::Bin/..";
 
 sub root { $ROOT }
@@ -21,6 +22,11 @@ sub free_port {
     close $s;
     return $p;
 }
+
+sub port_open { !!IO::Socket::INET->new( PeerAddr => '127.0.0.1', PeerPort => $_[0], Timeout => 2 ) }
+
+# The collectors fall back to vendor/fallback/Net/Telnet.pm when Net::Telnet is not installed.
+sub have_net_telnet { local @INC = ( @INC, "$ROOT/vendor/fallback" ); eval { require Net::Telnet; 1 } }
 
 sub wait_port {
     my ( $port, $secs ) = @_;
@@ -66,7 +72,7 @@ sub run_collect {
     my $cmd = join ' ', map { quotemeta } $^X, "$ROOT/bin/cbt-collect", '-i', $inventory, '-o', $out, '--logdir', $log,
       '--timeout', 10, @extra;
     my $stdout = `$cmd 2>&1`;
-    return ( $? >> 8, $stdout, $out );
+    return ( $? >> 8, $stdout, $out, $log );
 }
 
 sub parse_sections {
