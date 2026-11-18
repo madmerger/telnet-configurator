@@ -1,6 +1,6 @@
 # telnet-configurator: 基地局コンフィグ収集 (CBT) デモ
 
-基地局装置に Telnet でログインし、コンフィギュレーションを収集する Perl プログラムです。
+基地局装置に Telnet または SSH (パスワード認証 / 公開鍵認証) でログインし、コンフィギュレーションを収集する Perl プログラムです。装置ごとにインベントリで `protocol = telnet|ssh` を切り替えられます (デフォルトは telnet)。
 KDDI 様 PoC のデモ用に、実機の CBT と同じ構成（機種・ソフトウェアバージョンごとのスクリプト）を小さく再現しています。
 デモでは Devin がこれを **Telnet から SSH (パスワード認証 / 公開鍵認証) に移行**します。台本は [docs/DEMO_SCENARIO.md](docs/DEMO_SCENARIO.md) を参照してください。
 
@@ -11,11 +11,13 @@ KDDI 様 PoC のデモ用に、実機の CBT と同じ構成（機種・ソフ�
 | パス | 役割 |
 | --- | --- |
 | `bin/cbt-collect` | 収集のエントリポイント。インベントリを読み、機種・SW バージョンごとのコレクタに振り分ける |
-| `lib/CBT/Session.pm` | Telnet セッション (Net::Telnet): ログイン、enable、コマンド実行 |
+| `lib/CBT/Session.pm` | セッション層 (Telnet / SSH): ログイン、enable、コマンド実行 |
+| `lib/CBT/SSH.pm` | SSH 接続 (Net::OpenSSH)。リモートの疑似端末を Net::Telnet で包み、既存のプロンプト処理を再利用する |
 | `lib/CBT/Collector/*.pm` | 機種・SW バージョン別コレクタ (AX-4000 R5 / R6) |
-| `collectors/bg7_v200.pl` | 共通ライブラリ以前からある単体スクリプト (BG-7 V200)。Net::Telnet を直接使う |
+| `collectors/bg7_v200.pl` | 共通ライブラリ以前からある単体スクリプト (BG-7 V200)。Telnet は Net::Telnet を直接使い、SSH は `CBT::SSH` を使う |
 | `conf/devices.conf` | 本番想定のインベントリ (例) |
-| `conf/devices.local.conf` | ローカルシミュレータ向けインベントリ |
+| `conf/devices.local.conf` | ローカルシミュレータ向けインベントリ (Telnet) |
+| `conf/devices.local-ssh.conf` | SSH ラボ向けインベントリ (lab/ssh: 公開鍵 2201-2203、lab/docker: パスワード 2401-2403) |
 | `sim/` | 基地局シミュレータ (Perl コアモジュールのみ) |
 | `lab/ssh/` | root も Docker も不要な SSH ラボ (公開鍵認証) |
 | `lab/docker/` | Docker の SSH ラボ (パスワード認証 + 公開鍵認証) |
@@ -35,10 +37,10 @@ KDDI 様 PoC のデモ用に、実機の CBT と同じ構成（機種・ソフ�
 
 ## セットアップ
 
-Perl 5.16 以上。シミュレータはコアモジュールのみで動きます。コレクタには Net::Telnet が必要です。
+Perl 5.16 以上。シミュレータはコアモジュールのみで動きます。コレクタには Net::Telnet、SSH 収集には Net::OpenSSH と IO::Pty (および `ssh` コマンド) が必要です。Telnet だけで使う場合は Net::OpenSSH がなくても動きます。
 
 ```sh
-cpanm --installdeps .            # または: sudo apt install libnet-telnet-perl
+cpanm --installdeps .            # または: sudo apt install libnet-telnet-perl libnet-openssh-perl libio-pty-perl
                                  #        brew install cpanminus && cpanm Net::Telnet
 ```
 
@@ -50,6 +52,46 @@ make collect                     # output/<装置名>/latest.cfg に収集
 telnet 127.0.0.1 2301            # 手で触ることも可能 (cbtadmin / cbt-pass)
 make sim-stop
 make test                        # テスト (シミュレータは自動で起動・停止)
+```
+
+## インベントリの設定 (Telnet / SSH)
+
+```ini
+[TKY-ENB-0001]
+host = 10.10.1.21
+protocol = ssh                 # telnet | ssh (省略時 telnet)
+auth = key                     # password | key (ssh のみ、省略時 password)
+key_file = ${CBT_SSH_KEY}      # auth = key のとき必須
+host_key_check = accept-new    # accept-new | yes | no (省略時 accept-new)
+# known_hosts = /path/to/known_hosts   # 任意
+model = AX-4000
+sw = R5.2.1
+user = cbtadmin
+password = ${CBT_PASSWORD}     # auth = password のとき使用
+enable_password = ${CBT_ENABLE_PASSWORD}
+```
+
+- パスワード・鍵パスは `${NAME}` で環境変数から渡します (インベントリに直接書かない)。
+- SSH では sshd が認証を済ませるため、`Username:` / `login:` / `Password:` のログインプロンプト処理は行いません。enable、ページャ無効化、プロンプト判定は Telnet と同じ処理を使います。
+- ポート省略時は Telnet 23 / SSH 22。
+
+## 使い方 (SSH)
+
+```sh
+make lab-ssh-start               # 公開鍵認証のラボ (2201-2203)
+make lab-docker-start            # パスワード認証のラボ (2401-2403)
+make collect-ssh                 # = CBT_PASSWORD / CBT_ENABLE_PASSWORD / CBT_SSH_KEY にラボの値を入れて
+                                 #   perl bin/cbt-collect -i conf/devices.local-ssh.conf
+# 手動で実行する場合
+export CBT_PASSWORD=cbt-pass CBT_ENABLE_PASSWORD=cbt-enable CBT_SSH_KEY=$PWD/lab/.state/cbt_id_ed25519
+perl bin/cbt-collect -i conf/devices.local-ssh.conf
+make test                        # ラボが起動していれば SSH のテストも実行 (未起動ならスキップ)
+```
+
+Telnet と SSH の収集結果は、先頭の `!! CBT collected` ヘッダ行以外一致します:
+
+```sh
+diff <(tail -n +2 output/TKY-ENB-0001/latest.cfg) <(tail -n +2 output/TKY-ENB-0001-key/latest.cfg)
 ```
 
 ## SSH ラボ (自分のマシンに SSH 接続してテスト)

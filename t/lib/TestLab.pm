@@ -10,7 +10,8 @@ use Exporter 'import';
 use lib "$FindBin::Bin/../sim/lib";
 use BSSim::Profile;
 
-our @EXPORT_OK = qw(root free_port start_telnet_sim write_inventory run_collect expected_sections parse_sections wait_port);
+our @EXPORT_OK =
+  qw(root free_port start_telnet_sim write_inventory run_collect expected_sections parse_sections wait_port ports_open body_without_header);
 our $ROOT = "$FindBin::Bin/..";
 
 sub root { $ROOT }
@@ -29,6 +30,24 @@ sub wait_port {
         select undef, undef, undef, 0.1;
     }
     return 0;
+}
+
+# true if something is listening on every given 127.0.0.1 port (used to skip when a lab is down)
+sub ports_open {
+    my (@ports) = @_;
+    for my $p (@ports) {
+        IO::Socket::INET->new( PeerAddr => '127.0.0.1', PeerPort => $p, Timeout => 1 ) or return 0;
+    }
+    return 1;
+}
+
+# collected file without the "!! CBT collected ... at TIMESTAMP" header line
+sub body_without_header {
+    my ($file) = @_;
+    open my $fh, '<', $file or die "$file: $!";
+    my @lines = <$fh>;
+    shift @lines if @lines && $lines[0] =~ /^!! CBT collected /;
+    return join '', @lines;
 }
 
 # devices: [ [profile, hostname], ... ] -> returns { hostname => port }, pid
