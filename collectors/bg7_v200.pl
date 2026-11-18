@@ -4,6 +4,8 @@
 #   bg7_v200.pl HOST PORT USER PASSWORD OUTFILE
 use strict;
 use warnings;
+use FindBin;
+BEGIN { push @INC, "$FindBin::RealBin/../vendor/fallback" }    # used only if Net::Telnet is not installed
 use Net::Telnet;
 
 my ( $host, $port, $user, $pass, $outfile ) = @ARGV;
