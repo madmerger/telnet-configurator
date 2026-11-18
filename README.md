@@ -17,6 +17,7 @@ KDDI 様 PoC のデモ用に、実機の CBT と同じ構成（機種・ソフ�
 | `conf/devices.conf` | 本番想定のインベントリ (例) |
 | `conf/devices.local.conf` | ローカルシミュレータ向けインベントリ |
 | `sim/` | 基地局シミュレータ (Perl コアモジュールのみ) |
+| `vendor/fallback/` | Net::Telnet が無い環境向けの代替モジュール (Net::Telnet がインストールされていればそちらを使う) |
 | `lab/ssh/` | root も Docker も不要な SSH ラボ (公開鍵認証) |
 | `lab/docker/` | Docker の SSH ラボ (パスワード認証 + 公開鍵認証) |
 | `t/` | テスト (シミュレータを起動し、収集結果が装置の出力と一致するか検証) |
@@ -41,6 +42,9 @@ Perl 5.16 以上。シミュレータはコアモジュールのみで動きま�
 cpanm --installdeps .            # または: sudo apt install libnet-telnet-perl
                                  #        brew install cpanminus && cpanm Net::Telnet
 ```
+
+Net::Telnet をインストールできない環境 (ネットワーク遮断など) では、`vendor/fallback/Net/Telnet.pm` が自動で使われます。
+このリポジトリが使う機能だけを実装した代替版で、Net::Telnet がインストールされていればそちらが優先されます。本番では Net::Telnet をインストールしてください。
 
 ## 使い方 (Telnet)
 
