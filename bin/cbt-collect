@@ -3,6 +3,10 @@
 #
 #   bin/cbt-collect -i conf/devices.local.conf            # all devices
 #   bin/cbt-collect -i conf/devices.local.conf -d TKY-ENB-0001
+#   bin/cbt-collect -i conf/devices.local-ssh.conf -v    # SSH lab, show each step
+#
+# Each device is collected over its inventory 'protocol' (telnet | ssh).
+# Relative key_file / known_hosts paths are taken from the repository root.
 #
 # Output: OUTDIR/<device>/<device>_<YYYYmmdd-HHMMSS>.cfg and OUTDIR/<device>/latest.cfg
 use strict;
@@ -14,8 +18,11 @@ use File::Path qw(make_path);
 use File::Copy qw(copy);
 use POSIX qw(strftime);
 use Cwd ();
+use IPC::Open3 qw(open3);
+use Symbol qw(gensym);
 use CBT::Inventory;
 
+$| = 1;
 my $ROOT = Cwd::abs_path("$FindBin::RealBin/..");
 
 # Which collector handles which model / software version.
@@ -26,7 +33,7 @@ my %HANDLERS = (
 );
 
 my %o = ( inventory => "$ROOT/conf/devices.conf", outdir => "$ROOT/output", logdir => "$ROOT/log", timeout => 20 );
-GetOptions( \%o, 'inventory|i=s', 'device|d=s@', 'outdir|o=s', 'logdir=s', 'timeout=i', 'help|h' )
+GetOptions( \%o, 'inventory|i=s', 'device|d=s@', 'outdir|o=s', 'logdir=s', 'timeout=i', 'verbose|v', 'help|h' )
   or usage();
 usage() if $o{help};
 
@@ -46,22 +53,28 @@ for my $dev (@$devices) {
     my $handler = $HANDLERS{$key};
     my $dir     = "$o{outdir}/$dev->{name}";
     my $file    = "$dir/$dev->{name}_$ts.cfg";
+    my $log     = "$o{logdir}/$dev->{name}.session.log";
     make_path($dir);
-    printf "%-14s %-8s %-12s %s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw}, $dev->{host}, $dev->{port} || 23;
+    for my $k (qw(key_file known_hosts)) {
+        $dev->{$k} = "$ROOT/$dev->{$k}" if defined $dev->{$k} && length $dev->{$k} && $dev->{$k} !~ m{^/};
+    }
+    my $via = $dev->{protocol} eq 'ssh' ? "ssh/$dev->{auth}" : 'telnet';
+    printf "%-14s %-8s %-12s %-12s %s:%s ... %s", $dev->{name}, $dev->{model}, $dev->{sw}, $via, $dev->{host}, $dev->{port},
+      $o{verbose} ? "\n" : '';
+    my $step = $o{verbose} ? sub { local $| = 1; printf "    > %s\n", shift } : undef;
 
     my $ok = eval {
         die "no collector for $key\n" unless $handler;
         if ( $handler->{module} ) {
             eval "require $handler->{module}; 1" or die $@;
-            my $c = $handler->{module}->new( timeout => $o{timeout}, session_log => "$o{logdir}/$dev->{name}.session.log" );
+            my $c = $handler->{module}->new( timeout => $o{timeout}, session_log => $log, progress => $step );
             my $sections = $c->collect($dev);
             open my $out, '>', $file or die "cannot write $file: $!\n";
             print $out "!! ===== $_->[0] =====\n", $_->[1] for @$sections;
             close $out;
         }
         else {
-            system( $^X, $handler->{script}, @{$dev}{qw(host port user password)}, $file ) == 0
-              or die "collector script exited with status " . ( $? >> 8 ) . "\n";
+            run_script( $handler->{script}, $dev, $file, $log );
         }
         1;
     };
@@ -70,11 +83,11 @@ for my $dev (@$devices) {
         prepend( $file, $header );
         copy( $file, "$dir/latest.cfg" );
         my $lines = () = do { open my $fh, '<', $file; <$fh> };
-        print "OK ($lines lines) -> $file\n";
+        print $o{verbose} ? '    => ' : '', "OK ($lines lines) -> $file\n";
     }
     else {
         my $err = $@ || "unknown error\n";
-        print "FAILED: $err";
+        print $o{verbose} ? '    => ' : '', "FAILED: $err";
         unlink $file;
         push @failed, $dev->{name};
     }
@@ -82,6 +95,28 @@ for my $dev (@$devices) {
 
 printf "\n%d/%d devices collected\n", @$devices - @failed, scalar @$devices;
 exit( @failed ? 1 : 0 );
+
+# Standalone collector scripts get the transport settings as options; secrets
+# go through the child's environment, not its (world-readable) command line.
+sub run_script {
+    my ( $script, $dev, $file, $log ) = @_;
+    my @opt = ( '--protocol', $dev->{protocol}, '--timeout', $o{timeout}, '--log', $log, $o{verbose} ? '--verbose' : () );
+    if ( $dev->{protocol} eq 'ssh' ) {
+        push @opt, '--auth', $dev->{auth}, '--host-key-check', $dev->{host_key_check};
+        push @opt, '--key-file',    $dev->{key_file}    if $dev->{auth} eq 'key';
+        push @opt, '--known-hosts', $dev->{known_hosts} if $dev->{known_hosts};
+    }
+    local $ENV{CBT_SESSION_PASSWORD}       = $dev->{password}       // '';
+    local $ENV{CBT_SESSION_KEY_PASSPHRASE} = $dev->{key_passphrase} // '';
+    my $pid = open3( my $in, '>&STDOUT', my $err = gensym, $^X, $script, @opt,
+        $dev->{host}, $dev->{port}, $dev->{user} // '', '-', $file );
+    close $in;
+    my @err = <$err>;
+    waitpid $pid, 0;
+    return 1 if $? == 0;
+    die $err[-1] if @err;
+    die "collector script exited with status " . ( $? >> 8 ) . "\n";
+}
 
 sub prepend {
     my ( $file, $text ) = @_;
@@ -96,7 +131,7 @@ sub prepend {
 
 sub usage {
     print <<"END";
-usage: $0 [-i INVENTORY] [-d DEVICE ...] [-o OUTDIR] [--timeout SEC]
+usage: $0 [-i INVENTORY] [-d DEVICE ...] [-o OUTDIR] [--logdir DIR] [--timeout SEC] [-v]
 END
     exit 2;
 }

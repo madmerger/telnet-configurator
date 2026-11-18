@@ -57,4 +57,22 @@ subtest 'bad credentials fail that device only' => sub {
     like $stdout, qr/TST-ENB-0001.*FAILED: login failed/, 'reports the login failure';
 };
 
+subtest 'bad enable password fails that device' => sub {
+    my $bad = write_inventory(
+        {
+            name            => 'TST-ENB-0002',
+            host            => '127.0.0.1',
+            port            => $ports->{'TST-ENB-0002'},
+            model           => 'AX-4000',
+            sw              => 'R6.1.0',
+            user            => 'cbtadmin',
+            password        => 'cbt-pass',
+            enable_password => 'wrong',
+        }
+    );
+    my ( $rc, $stdout ) = run_collect($bad);
+    isnt $rc, 0, 'non-zero exit';
+    like $stdout, qr/TST-ENB-0002.*FAILED: enable failed/, 'reports the enable failure';
+};
+
 done_testing;
