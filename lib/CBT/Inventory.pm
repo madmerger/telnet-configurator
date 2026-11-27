@@ -7,8 +7,8 @@ package CBT::Inventory;
 #   auth     = password | key        (ssh only, default: password)
 #   key_file = PATH                  (required for auth = key)
 #   host_key_check = yes | accept-new | no   (ssh only, default: yes)
-#   known_hosts    = PATH            (ssh only; required for host_key_check = yes:
-#                                     a file with the devices' pre-registered host keys)
+#   known_hosts    = PATH            (ssh only; required for host_key_check = yes: a file with the
+#                                     devices' pre-registered host keys, checked per device on connect)
 use strict;
 use warnings;
 
@@ -43,8 +43,6 @@ sub load {
         $d->{host_key_check} = lc( $d->{host_key_check} // 'yes' );
         die "$file: device [$d->{name}]: host_key_check must be yes, accept-new or no\n"
           unless $d->{host_key_check} =~ /^(yes|accept-new|no)$/;
-        die "$file: device [$d->{name}]: host_key_check = yes needs known_hosts (pre-registered host keys)\n"
-          if $d->{host_key_check} eq 'yes' && !defined $d->{known_hosts};
     }
     return \@devices;
 }

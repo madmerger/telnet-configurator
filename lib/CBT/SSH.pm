@@ -21,11 +21,14 @@ sub open {
     my $auth    = $a{auth}    || 'password';
     my $hkc     = $a{host_key_check} || 'yes';
     my $where   = "$a{host}:$port";
+    for my $k (qw(known_hosts key_file)) {    # ~/ as OpenSSH would expand it
+        $a{$k} =~ s{^~(?=/)}{ $ENV{HOME} // ( getpwuid $< )[7] }e if defined $a{$k};
+    }
     die "unknown host_key_check '$hkc' (yes|no|accept-new)\n" unless $HOST_KEY_CHECK{$hkc};
 
     my @opts = ( -o => "StrictHostKeyChecking=$hkc", -o => "ConnectTimeout=$timeout", -o => 'LogLevel=ERROR' );
     if ( $hkc eq 'yes' ) {    # only host keys registered in advance are trusted
-        die "host_key_check = yes but known_hosts is empty (environment variable not set?)\n"
+        die "host_key_check = yes needs known_hosts with the pre-registered host keys (empty: environment variable not set?)\n"
           unless length( $a{known_hosts} // '' );
         die "known_hosts file '$a{known_hosts}' is not readable\n" unless -r $a{known_hosts};
     }

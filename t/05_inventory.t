@@ -40,8 +40,8 @@ subtest 'ssh with password and key auth, secrets from the environment' => sub {
 };
 
 subtest 'host key checking' => sub {
-    eval { CBT::Inventory->load( inv("[A]\n${base}protocol = ssh\npassword = x\n") ) };
-    like $@, qr/\[A\]: host_key_check = yes needs known_hosts/, 'default (yes) requires known_hosts';
+    my $d = CBT::Inventory->load( inv("[A]\n${base}protocol = ssh\npassword = x\n") )->[0];
+    is $d->{host_key_check}, 'yes', 'missing known_hosts does not stop loading (the device fails on connect)';
     eval { CBT::Inventory->load( inv("[A]\n${base}protocol = ssh\nhost_key_check = maybe\nknown_hosts = /k\n") ) };
     like $@, qr/\[A\]: host_key_check must be yes, accept-new or no/, 'unknown host_key_check';
     for my $hkc (qw(accept-new no)) {
