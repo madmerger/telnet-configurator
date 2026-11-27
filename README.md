@@ -62,8 +62,8 @@ host = 10.10.1.21
 protocol = ssh                 # telnet | ssh (省略時 telnet)
 auth = key                     # password | key (ssh のみ、省略時 password)
 key_file = ${CBT_SSH_KEY}      # auth = key のとき必須
-host_key_check = accept-new    # accept-new | yes | no (省略時 accept-new)
-# known_hosts = /path/to/known_hosts   # 任意
+host_key_check = yes           # yes | accept-new | no (ssh のみ、省略時 yes)
+known_hosts = ${CBT_KNOWN_HOSTS}   # host_key_check = yes のとき必須: 事前登録したホスト鍵のファイル
 model = AX-4000
 sw = R5.2.1
 user = cbtadmin
@@ -74,6 +74,12 @@ enable_password = ${CBT_ENABLE_PASSWORD}
 - パスワード・鍵パスは `${NAME}` で環境変数から渡します (インベントリに直接書かない)。
 - SSH では sshd が認証を済ませるため、`Username:` / `login:` / `Password:` のログインプロンプト処理は行いません。enable、ページャ無効化、プロンプト判定は Telnet と同じ処理を使います。
 - ポート省略時は Telnet 23 / SSH 22。
+- SSH のホスト鍵確認は既定で厳格 (`host_key_check = yes`) です。`known_hosts` に登録済みのホスト鍵と一致しない装置には接続しません (中間者攻撃でパスワードを盗まれるのを防ぐため)。本番では装置のホスト鍵を事前に登録してください。例:
+  ```sh
+  ssh-keyscan -p 22 10.10.1.21 >> /etc/cbt/known_hosts   # 取得した鍵のフィンガープリントを装置側の表示と照合してから使う
+  ssh-keygen -lf /etc/cbt/known_hosts
+  ```
+  `accept-new` (初回接続の鍵を無確認で登録) と `no` (確認しない) は明示した場合だけ使われます。ラボ用の `conf/devices.local-ssh.conf` は、ホスト鍵を作り直すラボ専用として `no` を指定しています。
 
 ## 使い方 (SSH)
 

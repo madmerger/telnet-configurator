@@ -71,7 +71,7 @@ sub write_inventory {
     open my $fh, '>', $file or die $!;
     for my $d (@devs) {
         print $fh "[$d->{name}]\n";
-        print $fh "$_ = $d->{$_}\n" for grep { $_ ne 'name' } sort keys %$d;
+        print $fh "$_ = $d->{$_}\n" for grep { $_ ne 'name' && defined $d->{$_} } sort keys %$d;
         print $fh "\n";
     }
     close $fh;

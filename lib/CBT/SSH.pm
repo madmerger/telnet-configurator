@@ -19,11 +19,16 @@ sub open {
     my $port    = $a{port}    || 22;
     my $timeout = $a{timeout} || 20;
     my $auth    = $a{auth}    || 'password';
-    my $hkc     = $a{host_key_check} || 'accept-new';
+    my $hkc     = $a{host_key_check} || 'yes';
     my $where   = "$a{host}:$port";
     die "unknown host_key_check '$hkc' (yes|no|accept-new)\n" unless $HOST_KEY_CHECK{$hkc};
 
     my @opts = ( -o => "StrictHostKeyChecking=$hkc", -o => "ConnectTimeout=$timeout", -o => 'LogLevel=ERROR' );
+    if ( $hkc eq 'yes' ) {    # only host keys registered in advance are trusted
+        die "host_key_check = yes but known_hosts is empty (environment variable not set?)\n"
+          unless length( $a{known_hosts} // '' );
+        die "known_hosts file '$a{known_hosts}' is not readable\n" unless -r $a{known_hosts};
+    }
     if    ( $hkc eq 'no' )   { push @opts, -o => 'UserKnownHostsFile=/dev/null' }
     elsif ( $a{known_hosts} ) { push @opts, -o => "UserKnownHostsFile=$a{known_hosts}" }
 

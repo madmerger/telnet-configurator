@@ -131,6 +131,42 @@ subtest 'lab/ssh: wrong enable password and missing key are reported' => sub {
     like $stdout, qr/OSK-ENB-0102 .*FAILED: ssh key file .* is not readable/, 'unreadable key file';
 };
 
+subtest 'lab/ssh: strict host key checking (default) with pre-registered known_hosts' => sub {
+    plan skip_all => 'lab/ssh not running (make lab-ssh-start)' unless ports_open( 2201 .. 2203 ) && -r $key;
+    my $dir   = File::Temp::tempdir( CLEANUP => 1 );
+    my $known = "$dir/known_hosts";
+    system("ssh-keyscan -p 2201 127.0.0.1 > $known 2>/dev/null") == 0 && -s $known
+      or plan skip_all => 'ssh-keyscan failed';
+    # The lab sshd uses one host key for all ports; register it under each port.
+    open my $fh, '<', $known or die $!;
+    my @keys = grep { /^\[127\.0\.0\.1\]:2201 / } <$fh>;
+    close $fh;
+    open $fh, '>', $known or die $!;
+    for my $port ( 2201 .. 2203 ) { print $fh s/^\[127\.0\.0\.1\]:2201 /[127.0.0.1]:$port /r for @keys }
+    close $fh;
+    open $fh, '>', "$dir/empty" or die $!;
+    close $fh;
+
+    my %strict = ( host_key_check => undef );    # not set: the default (yes) applies
+    my ( $rc, $stdout, $outdir ) = run_collect(
+        write_inventory( map { ssh_device( $_, 'lab_ssh', 'key', %strict, known_hosts => $known ) } @names ) );
+    is $rc, 0, 'all devices collected with registered host keys' or diag $stdout;
+    is body_without_header("$outdir/$_/latest.cfg"), body_without_header("$telnet_dir/$_/latest.cfg"),
+      "$_: identical to the telnet collection" for @names;
+
+    ( $rc, $stdout ) = run_collect(
+        write_inventory(
+            ssh_device( 'TKY-ENB-0001', 'lab_ssh', 'key', %strict, known_hosts => "$dir/empty" ),
+            ssh_device( 'NGY-GNB-0203', 'lab_ssh', 'key', %strict, known_hosts => "$dir/empty" ),
+            ssh_device( 'OSK-ENB-0102', 'lab_ssh', 'key', %strict, known_hosts => "$dir/missing" ),
+        )
+    );
+    isnt $rc, 0, 'non-zero exit';
+    like $stdout, qr/TKY-ENB-0001 .*FAILED: ssh login .*Host key verification failed/, 'unknown host key refused (AX-4000)';
+    like $stdout, qr/NGY-GNB-0203 .*Host key verification failed.*\n.*FAILED/, 'unknown host key refused (BG-7)';
+    like $stdout, qr/OSK-ENB-0102 .*FAILED: known_hosts file .* is not readable/, 'missing known_hosts file';
+};
+
 sub zombie_children {
     my @z;
     for my $stat ( glob '/proc/[0-9]*/stat' ) {

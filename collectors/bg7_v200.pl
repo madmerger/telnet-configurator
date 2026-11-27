@@ -2,7 +2,7 @@
 # Tsuki Systems BG-7 gNodeB, software V200
 # Standalone collector (predates lib/CBT); invoked by bin/cbt-collect as
 #   bg7_v200.pl [--protocol telnet|ssh] [--auth password|key] [--key-file FILE]
-#               [--host-key-check accept-new|yes|no] [--known-hosts FILE]
+#               [--host-key-check yes|accept-new|no] [--known-hosts FILE]
 #               HOST PORT USER PASSWORD OUTFILE
 # An empty PASSWORD is read from $CBT_COLLECT_PASSWORD (keeps it out of the process list).
 # Over SSH, sshd authenticates the user (password or key), so there is no login: prompt.
