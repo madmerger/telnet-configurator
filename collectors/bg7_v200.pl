@@ -18,6 +18,7 @@ GetOptions( \%o, 'protocol=s', 'auth=s', 'key-file=s', 'host-key-check=s', 'know
   or die "usage: $0 [options] HOST PORT USER PASSWORD OUTFILE\n";
 die "usage: $0 [options] HOST PORT USER PASSWORD OUTFILE\n" unless @ARGV == 5 && length $ARGV[4];
 my ( $host, $port, $user, $pass, $outfile ) = @ARGV;
+$o{timeout} ||= 20;
 $pass = $ENV{CBT_COLLECT_PASSWORD} // '' unless length $pass;
 
 my $prompt = '/<[\w.-]+>$/';
