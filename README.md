@@ -84,9 +84,11 @@ enable_password = ${CBT_ENABLE_PASSWORD}
 - ポート省略時は Telnet 23 / SSH 22。
 - SSH のホスト鍵確認は既定で厳格 (`host_key_check = yes`) です。`known_hosts` に登録済みのホスト鍵と一致しない装置には接続しません (中間者攻撃でパスワードを盗まれるのを防ぐため)。本番では装置のホスト鍵を事前に登録してください。例:
   ```sh
-  ssh-keyscan -p 22 10.10.1.21 > /tmp/10.10.1.21.keys   # まだ収集用ファイルには入れない
-  ssh-keygen -lf /tmp/10.10.1.21.keys                     # 装置のコンソールで表示したフィンガープリントと照合する
-  cat /tmp/10.10.1.21.keys >> /etc/cbt/known_hosts        # 一致した場合だけ追記する
+  tmp=$(mktemp)                                   # 他のユーザーが書き換えられない一時ファイル
+  ssh-keyscan -p 22 10.10.1.21 > "$tmp"           # まだ収集用ファイルには入れない
+  ssh-keygen -lf "$tmp"                           # 装置のコンソールで表示したフィンガープリントと照合する
+  cat "$tmp" >> /etc/cbt/known_hosts              # 一致した場合だけ追記する
+  rm -f "$tmp"
   ```
   `known_hosts` を指定すると、そのファイルの鍵だけを信頼します (システム共通の known_hosts は参照しません)。鍵を失効させるときはこのファイルから削除してください。`known_hosts` が未設定の SSH 装置は、その装置だけ FAILED になります。
   `accept-new` (初回接続の鍵を無確認で登録) と `no` (確認しない) は明示した場合だけ使われます。ラボ用の `conf/devices.local-ssh.conf` も既定の `yes` で、ラボ起動時に作るホスト鍵を登録した `lab/.state/known_hosts` を使います。
