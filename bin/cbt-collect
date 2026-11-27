@@ -63,7 +63,7 @@ for my $dev (@$devices) {
             close $out;
         }
         else {
-            my @opts = ( '--protocol', $dev->{protocol} );
+            my @opts = ( '--protocol', $dev->{protocol}, '--timeout', $o{timeout} );
             if ($ssh) {
                 push @opts, '--auth', $dev->{auth};
                 for my $k (qw(key_file host_key_check known_hosts)) {
