@@ -70,7 +70,7 @@ for my $dev (@$devices) {
                     push @opts, '--' . ( $k =~ tr/_/-/r ), $dev->{$k} if defined $dev->{$k};
                 }
             }
-            system( $^X, $handler->{script}, @opts, map( { $_ // '' } @{$dev}{qw(host port user password)} ), $file ) == 0
+            system( $^X, $handler->{script}, @opts, '--', map( { $_ // '' } @{$dev}{qw(host port user password)} ), $file ) == 0
               or die "collector script exited with status " . ( $? >> 8 ) . "\n";
         }
         1;

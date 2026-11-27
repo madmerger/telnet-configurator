@@ -80,18 +80,26 @@ sub open {
 
 sub telnet { $_[0]{t} }
 
+# Idempotent; also runs from DESTROY so the ssh child is reaped when collection dies midway.
 sub close {
     my ($self) = @_;
+    my $pid = delete $self->{pid} or return 1;
     $self->{t}->close;    # closing the pty master hangs up the ssh client
     for ( 1 .. 20 ) {
-        return $self->_done if waitpid( $self->{pid}, WNOHANG ) != 0;
+        return $self->_done if waitpid( $pid, WNOHANG ) != 0;
         select undef, undef, undef, 0.1;
     }
-    kill 'TERM', $self->{pid};
-    waitpid $self->{pid}, 0;
+    kill 'TERM', $pid;
+    waitpid $pid, 0;
     $self->_done;
 }
 
 sub _done { my ($self) = @_; undef $self->{ssh}; 1 }
+
+sub DESTROY {
+    my ($self) = @_;
+    local ( $@, $!, $? );
+    $self->close;
+}
 
 1;

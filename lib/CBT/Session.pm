@@ -54,7 +54,8 @@ sub enable {
     $t->print($cmd);
     $t->waitfor('/Password: ?$/') or die "no enable password prompt\n";
     # Over SSH the remote pty may echo the password; keep it out of the session log.
-    my $log = $self->{ssh} ? $t->input_log('') : undef;
+    my $log = $self->{ssh} ? $t->input_log : undef;    # current log handle ('' if off)
+    $t->input_log('') if $log;
     $t->print($password);
     my ( $pre, $match ) = $t->waitfor( Match => '/% Bad enable password/', Match => $t->prompt );
     $t->input_log($log) if $log;

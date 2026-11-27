@@ -9,7 +9,7 @@ use strict;
 use warnings;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";
-use Getopt::Long;
+use Getopt::Long qw(:config require_order);    # a password starting with '-' stays positional
 use Net::Telnet;
 
 my %o = ( protocol => 'telnet', auth => 'password' );

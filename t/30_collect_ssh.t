@@ -6,6 +6,7 @@
 use strict;
 use warnings;
 use Test::More;
+use File::Temp ();
 use FindBin;
 use lib "$FindBin::Bin/lib";
 use TestLab qw(root start_telnet_sim write_inventory run_collect expected_sections parse_sections ports_open body_without_header);
@@ -128,6 +129,39 @@ subtest 'lab/ssh: wrong enable password and missing key are reported' => sub {
     isnt $rc, 0, 'non-zero exit';
     like $stdout, qr/TKY-ENB-0001 .*FAILED: enable failed/,                 'bad enable password';
     like $stdout, qr/OSK-ENB-0102 .*FAILED: ssh key file .* is not readable/, 'unreadable key file';
+};
+
+sub zombie_children {
+    my @z;
+    for my $stat ( glob '/proc/[0-9]*/stat' ) {
+        open my $fh, '<', $stat or next;
+        my $line = <$fh> // next;
+        my ( $pid, $state, $ppid ) = $line =~ /^(\d+) \(.*\) (\S) (\d+)/ or next;
+        push @z, $pid if $ppid == $$ && $state eq 'Z';
+    }
+    return @z;
+}
+
+subtest 'lab/ssh: session log after enable, ssh child reaped on failure' => sub {
+    plan skip_all => 'lab/ssh not running (make lab-ssh-start)' unless ports_open( 2201 .. 2203 ) && -r $key;
+    require lib;
+    lib->import( root() . '/lib' );
+    require CBT::Collector::AX4000_R5;
+    my $dir = File::Temp::tempdir( CLEANUP => 1 );
+    my %dev = ( %{ ssh_device( 'TKY-ENB-0001', 'lab_ssh', 'key' ) }, key_file => $key, enable_password => 'cbt-enable' );
+
+    my $c = CBT::Collector::AX4000_R5->new( timeout => 10, session_log => "$dir/ok.log" );
+    ok eval { $c->collect( \%dev ); 1 }, 'collected' or diag $@;
+    my $log = do { local ( @ARGV, $/ ) = "$dir/ok.log"; <> };
+    like $log, qr/terminal length 0/, 'commands after enable are in the session log';
+    like $log, qr/show cell status/, 'last command is in the session log';
+    unlike $log, qr/cbt-enable/, 'enable password is not in the session log';
+
+    for ( 1 .. 3 ) {
+        my $bad = CBT::Collector::AX4000_R5->new( timeout => 10, session_log => "$dir/bad.log" );
+        ok !eval { $bad->collect( { %dev, enable_password => 'bad' } ); 1 }, "bad enable password fails ($_)";
+    }
+    is_deeply [ zombie_children() ], [], 'no zombie ssh children after failed collections';
 };
 
 done_testing;
