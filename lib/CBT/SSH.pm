@@ -30,7 +30,9 @@ sub open {
         die "known_hosts file '$a{known_hosts}' is not readable\n" unless -r $a{known_hosts};
     }
     if    ( $hkc eq 'no' )   { push @opts, -o => 'UserKnownHostsFile=/dev/null' }
-    elsif ( $a{known_hosts} ) { push @opts, -o => "UserKnownHostsFile=$a{known_hosts}" }
+    elsif ( $a{known_hosts} ) {    # trust only this file, not /etc/ssh/ssh_known_hosts
+        push @opts, -o => "UserKnownHostsFile=$a{known_hosts}", -o => 'GlobalKnownHostsFile=/dev/null';
+    }
 
     my %cred;
     if ( $auth eq 'key' ) {
