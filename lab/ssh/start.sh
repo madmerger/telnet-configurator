@@ -20,7 +20,6 @@ if [ -f "$STATE/sshd.pid" ] && kill -0 "$(cat "$STATE/sshd.pid")" 2>/dev/null; t
     exit 0
 fi
 
-[ -f "$STATE/ssh_host_ed25519_key" ] || ssh-keygen -q -t ed25519 -N '' -f "$STATE/ssh_host_ed25519_key"
 cp "$STATE/cbt_id_ed25519.pub" "$STATE/authorized_keys"
 chmod 600 "$STATE/authorized_keys"
 

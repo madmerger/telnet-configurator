@@ -59,37 +59,48 @@ make test                        # テスト (シミュレータは自動で起�
 ```ini
 [TKY-ENB-0001]
 host = 10.10.1.21
-protocol = ssh                 # telnet | ssh (省略時 telnet)
-auth = key                     # password | key (ssh のみ、省略時 password)
-key_file = ${CBT_SSH_KEY}      # auth = key のとき必須
-host_key_check = yes           # yes | accept-new | no (ssh のみ、省略時 yes)
-known_hosts = ${CBT_KNOWN_HOSTS}   # host_key_check = yes のとき必須: 事前登録したホスト鍵のファイル
+# telnet | ssh (省略時 telnet)
+protocol = ssh
+# password | key (ssh のみ、省略時 password)
+auth = key
+# auth = key のとき必須
+key_file = ${CBT_SSH_KEY}
+# yes | accept-new | no (ssh のみ、省略時 yes)
+host_key_check = yes
+# host_key_check = yes のとき必須: 事前登録したホスト鍵のファイル
+known_hosts = ${CBT_KNOWN_HOSTS}
 model = AX-4000
 sw = R5.2.1
 user = cbtadmin
-password = ${CBT_PASSWORD}     # auth = password のとき使用
+# auth = password のとき使用
+password = ${CBT_PASSWORD}
 enable_password = ${CBT_ENABLE_PASSWORD}
 ```
+
+- 行末コメントは値の一部になるため、コメントは `#` で始まる独立した行に書きます。
 
 - パスワード・鍵パスは `${NAME}` で環境変数から渡します (インベントリに直接書かない)。
 - SSH では sshd が認証を済ませるため、`Username:` / `login:` / `Password:` のログインプロンプト処理は行いません。enable、ページャ無効化、プロンプト判定は Telnet と同じ処理を使います。
 - ポート省略時は Telnet 23 / SSH 22。
 - SSH のホスト鍵確認は既定で厳格 (`host_key_check = yes`) です。`known_hosts` に登録済みのホスト鍵と一致しない装置には接続しません (中間者攻撃でパスワードを盗まれるのを防ぐため)。本番では装置のホスト鍵を事前に登録してください。例:
   ```sh
-  ssh-keyscan -p 22 10.10.1.21 >> /etc/cbt/known_hosts   # 取得した鍵のフィンガープリントを装置側の表示と照合してから使う
-  ssh-keygen -lf /etc/cbt/known_hosts
+  ssh-keyscan -p 22 10.10.1.21 > /tmp/10.10.1.21.keys   # まだ収集用ファイルには入れない
+  ssh-keygen -lf /tmp/10.10.1.21.keys                     # 装置のコンソールで表示したフィンガープリントと照合する
+  cat /tmp/10.10.1.21.keys >> /etc/cbt/known_hosts        # 一致した場合だけ追記する
   ```
-  `accept-new` (初回接続の鍵を無確認で登録) と `no` (確認しない) は明示した場合だけ使われます。ラボ用の `conf/devices.local-ssh.conf` は、ホスト鍵を作り直すラボ専用として `no` を指定しています。
+  `known_hosts` を指定すると、そのファイルの鍵だけを信頼します (システム共通の known_hosts は参照しません)。鍵を失効させるときはこのファイルから削除してください。`known_hosts` が未設定の SSH 装置は、その装置だけ FAILED になります。
+  `accept-new` (初回接続の鍵を無確認で登録) と `no` (確認しない) は明示した場合だけ使われます。ラボ用の `conf/devices.local-ssh.conf` も既定の `yes` で、ラボ起動時に作るホスト鍵を登録した `lab/.state/known_hosts` を使います。
 
 ## 使い方 (SSH)
 
 ```sh
 make lab-ssh-start               # 公開鍵認証のラボ (2201-2203)
 make lab-docker-start            # パスワード認証のラボ (2401-2403)
-make collect-ssh                 # = CBT_PASSWORD / CBT_ENABLE_PASSWORD / CBT_SSH_KEY にラボの値を入れて
+make collect-ssh                 # = CBT_PASSWORD / CBT_ENABLE_PASSWORD / CBT_SSH_KEY / CBT_LAB_KNOWN_HOSTS にラボの値を入れて
                                  #   perl bin/cbt-collect -i conf/devices.local-ssh.conf
 # 手動で実行する場合
 export CBT_PASSWORD=cbt-pass CBT_ENABLE_PASSWORD=cbt-enable CBT_SSH_KEY=$PWD/lab/.state/cbt_id_ed25519
+export CBT_LAB_KNOWN_HOSTS=$PWD/lab/.state/known_hosts
 perl bin/cbt-collect -i conf/devices.local-ssh.conf
 make test                        # ラボが起動していれば SSH のテストも実行 (未起動ならスキップ)
 ```

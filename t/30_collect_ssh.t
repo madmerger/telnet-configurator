@@ -22,6 +22,7 @@ my %devices = (
 my @names = sort keys %devices;
 my $key   = root() . '/lab/.state/cbt_id_ed25519';
 my $me    = getpwuid($<);
+my $lab_known = root() . '/lab/.state/known_hosts';    # written by lab/keys.sh
 
 # Secrets are passed through ${NAME} references, as in production inventories.
 $ENV{CBT_TEST_SSH_PASSWORD}   = 'cbt-pass';
@@ -47,7 +48,7 @@ sub ssh_device {
         protocol       => 'ssh',
         port           => $devices{$name}{$lab},
         auth           => $auth,
-        host_key_check => 'no',
+        known_hosts    => $lab_known,
         user           => $lab eq 'lab_ssh' ? $me : 'cbtadmin',
         ( $auth eq 'key' ? ( key_file => '${CBT_TEST_SSH_KEY}' ) : ( password => '${CBT_TEST_SSH_PASSWORD}' ) ),
         %extra,
@@ -135,16 +136,8 @@ subtest 'lab/ssh: strict host key checking (default) with pre-registered known_h
     plan skip_all => 'lab/ssh not running (make lab-ssh-start)' unless ports_open( 2201 .. 2203 ) && -r $key;
     my $dir   = File::Temp::tempdir( CLEANUP => 1 );
     my $known = "$dir/known hosts";    # a path with a space must work
-    system("ssh-keyscan -p 2201 127.0.0.1 > '$known' 2>/dev/null") == 0 && -s $known
-      or plan skip_all => 'ssh-keyscan failed';
-    # The lab sshd uses one host key for all ports; register it under each port.
-    open my $fh, '<', $known or die $!;
-    my @keys = grep { /^\[127\.0\.0\.1\]:2201 / } <$fh>;
-    close $fh;
-    open $fh, '>', $known or die $!;
-    for my $port ( 2201 .. 2203 ) { print $fh s/^\[127\.0\.0\.1\]:2201 /[127.0.0.1]:$port /r for @keys }
-    close $fh;
-    open $fh, '>', "$dir/empty" or die $!;
+    system( 'cp', $lab_known, $known ) == 0 or plan skip_all => "no $lab_known (restart the lab)";
+    open my $fh, '>', "$dir/empty" or die $!;
     close $fh;
 
     my %strict = ( host_key_check => undef );    # not set: the default (yes) applies
@@ -165,6 +158,28 @@ subtest 'lab/ssh: strict host key checking (default) with pre-registered known_h
     like $stdout, qr/TKY-ENB-0001 .*FAILED: ssh login .*Host key verification failed/, 'unknown host key refused (AX-4000)';
     like $stdout, qr/NGY-GNB-0203 .*Host key verification failed.*\n.*FAILED/, 'unknown host key refused (BG-7)';
     like $stdout, qr/OSK-ENB-0102 .*FAILED: known_hosts file .* is not readable/, 'missing known_hosts file';
+
+    ( $rc, $stdout ) = run_collect(
+        write_inventory(
+            ssh_device( 'TKY-ENB-0001', 'lab_ssh', 'key', %strict, known_hosts => undef ),
+            ssh_device( 'OSK-ENB-0102', 'lab_ssh', 'key', %strict, known_hosts => $known ),
+        )
+    );
+    like $stdout, qr/TKY-ENB-0001 .*FAILED: host_key_check = yes needs known_hosts/, 'no known_hosts: only that device fails';
+    like $stdout, qr/OSK-ENB-0102 .*OK/, 'other devices are still collected';
+
+    {
+        local $ENV{HOME} = $dir;
+        require lib;
+        lib->import( root() . '/lib' );
+        require CBT::SSH;
+        my $s = eval {
+            CBT::SSH->open( host => '127.0.0.1', port => 2201, user => $me, auth => 'key', key_file => $key,
+                known_hosts => '~/known hosts', prompt => '/[>#]\s*$/' );
+        };
+        ok $s, 'known_hosts = ~/... is expanded like OpenSSH does' or diag $@;
+        $s->close if $s;
+    }
 };
 
 sub zombie_children {
