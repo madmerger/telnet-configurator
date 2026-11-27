@@ -161,7 +161,10 @@ subtest 'lab/ssh: session log after enable, ssh child reaped on failure' => sub 
         my $bad = CBT::Collector::AX4000_R5->new( timeout => 10, session_log => "$dir/bad.log" );
         ok !eval { $bad->collect( { %dev, enable_password => 'bad' } ); 1 }, "bad enable password fails ($_)";
     }
-    is_deeply [ zombie_children() ], [], 'no zombie ssh children after failed collections';
+    SKIP: {
+        skip 'no /proc to inspect child processes', 1 unless -r "/proc/$$/stat";
+        is_deeply [ zombie_children() ], [], 'no zombie ssh children after failed collections';
+    }
 };
 
 done_testing;

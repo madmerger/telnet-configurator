@@ -4,6 +4,7 @@
 #   bg7_v200.pl [--protocol telnet|ssh] [--auth password|key] [--key-file FILE]
 #               [--host-key-check accept-new|yes|no] [--known-hosts FILE]
 #               HOST PORT USER PASSWORD OUTFILE
+# An empty PASSWORD is read from $CBT_COLLECT_PASSWORD (keeps it out of the process list).
 # Over SSH, sshd authenticates the user (password or key), so there is no login: prompt.
 use strict;
 use warnings;
@@ -15,8 +16,9 @@ use Net::Telnet;
 my %o = ( protocol => 'telnet', auth => 'password' );
 GetOptions( \%o, 'protocol=s', 'auth=s', 'key-file=s', 'host-key-check=s', 'known-hosts=s' )
   or die "usage: $0 [options] HOST PORT USER PASSWORD OUTFILE\n";
+die "usage: $0 [options] HOST PORT USER PASSWORD OUTFILE\n" unless @ARGV == 5 && length $ARGV[4];
 my ( $host, $port, $user, $pass, $outfile ) = @ARGV;
-die "usage: $0 [options] HOST PORT USER PASSWORD OUTFILE\n" unless $outfile;
+$pass = $ENV{CBT_COLLECT_PASSWORD} // '' unless length $pass;
 
 my $prompt = '/<[\w.-]+>$/';
 my ( $t, $ssh );
