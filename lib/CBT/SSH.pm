@@ -21,8 +21,8 @@ sub open {
     my $auth    = $a{auth}    || 'password';
     my $hkc     = $a{host_key_check} || 'yes';
     my $where   = "$a{host}:$port";
-    for my $k (qw(known_hosts key_file)) {    # ~/ as OpenSSH would expand it
-        $a{$k} =~ s{^~(?=/)}{ $ENV{HOME} // ( getpwuid $< )[7] }e if defined $a{$k};
+    for my $k (qw(known_hosts key_file)) {    # ~/ as OpenSSH expands it: the user's passwd home, not $HOME
+        $a{$k} =~ s{^~(?=/)}{ ( getpwuid $< )[7] }e if defined $a{$k};
     }
     die "unknown host_key_check '$hkc' (yes|no|accept-new)\n" unless $HOST_KEY_CHECK{$hkc};
 

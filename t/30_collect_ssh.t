@@ -169,13 +169,17 @@ subtest 'lab/ssh: strict host key checking (default) with pre-registered known_h
     like $stdout, qr/OSK-ENB-0102 .*OK/, 'other devices are still collected';
 
     {
-        local $ENV{HOME} = $dir;
+        my $home = ( getpwuid $< )[7];
+        my $sub  = File::Temp::tempdir( 'cbt-t-XXXXXX', DIR => $home, CLEANUP => 1 );
+        system( 'cp', $known, "$sub/known hosts" ) == 0 or die "cp: $?";
+        ( my $rel = $sub ) =~ s{^\Q$home\E/}{};
+        local $ENV{HOME} = $dir;    # ignored: OpenSSH expands ~ from the passwd entry
         require lib;
         lib->import( root() . '/lib' );
         require CBT::SSH;
         my $s = eval {
             CBT::SSH->open( host => '127.0.0.1', port => 2201, user => $me, auth => 'key', key_file => $key,
-                known_hosts => '~/known hosts', prompt => '/[>#]\s*$/' );
+                known_hosts => "~/$rel/known hosts", prompt => '/[>#]\s*$/' );
         };
         ok $s, 'known_hosts = ~/... is expanded like OpenSSH does' or diag $@;
         $s->close if $s;
