@@ -134,8 +134,8 @@ subtest 'lab/ssh: wrong enable password and missing key are reported' => sub {
 subtest 'lab/ssh: strict host key checking (default) with pre-registered known_hosts' => sub {
     plan skip_all => 'lab/ssh not running (make lab-ssh-start)' unless ports_open( 2201 .. 2203 ) && -r $key;
     my $dir   = File::Temp::tempdir( CLEANUP => 1 );
-    my $known = "$dir/known_hosts";
-    system("ssh-keyscan -p 2201 127.0.0.1 > $known 2>/dev/null") == 0 && -s $known
+    my $known = "$dir/known hosts";    # a path with a space must work
+    system("ssh-keyscan -p 2201 127.0.0.1 > '$known' 2>/dev/null") == 0 && -s $known
       or plan skip_all => 'ssh-keyscan failed';
     # The lab sshd uses one host key for all ports; register it under each port.
     open my $fh, '<', $known or die $!;

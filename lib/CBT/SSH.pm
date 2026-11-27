@@ -31,7 +31,9 @@ sub open {
     }
     if    ( $hkc eq 'no' )   { push @opts, -o => 'UserKnownHostsFile=/dev/null' }
     elsif ( $a{known_hosts} ) {    # trust only this file, not /etc/ssh/ssh_known_hosts
-        push @opts, -o => "UserKnownHostsFile=$a{known_hosts}", -o => 'GlobalKnownHostsFile=/dev/null';
+        die "known_hosts path must not contain '\"'\n" if $a{known_hosts} =~ /"/;
+        push @opts, -o => qq{UserKnownHostsFile="$a{known_hosts}"},    # quoted: ssh splits on whitespace
+          -o => 'GlobalKnownHostsFile=/dev/null';
     }
 
     my %cred;
