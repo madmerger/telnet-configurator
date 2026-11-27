@@ -1,6 +1,14 @@
 package CBT::Inventory;
 # Reads the device inventory (INI style, one [section] per device).
 # Values may reference environment variables as ${NAME}.
+#
+# Connection keys (per device):
+#   protocol = telnet | ssh          (default: telnet)
+#   auth     = password | key        (ssh only, default: password)
+#   key_file = PATH                  (required for auth = key)
+#   host_key_check = yes | accept-new | no   (ssh only, default: yes)
+#   known_hosts    = PATH            (ssh only; required for host_key_check = yes: a file with the
+#                                     devices' pre-registered host keys, checked per device on connect)
 use strict;
 use warnings;
 
@@ -26,6 +34,15 @@ sub load {
         for my $req (qw(host model sw)) {
             die "$file: device [$d->{name}] is missing '$req'\n" unless defined $d->{$req};
         }
+        $d->{protocol} = lc( $d->{protocol} // 'telnet' );
+        die "$file: device [$d->{name}]: protocol must be telnet or ssh\n" unless $d->{protocol} =~ /^(telnet|ssh)$/;
+        next unless $d->{protocol} eq 'ssh';
+        $d->{auth} = lc( $d->{auth} // 'password' );
+        die "$file: device [$d->{name}]: auth must be password or key\n" unless $d->{auth} =~ /^(password|key)$/;
+        die "$file: device [$d->{name}]: auth = key needs key_file\n" if $d->{auth} eq 'key' && !defined $d->{key_file};
+        $d->{host_key_check} = lc( $d->{host_key_check} // 'yes' );
+        die "$file: device [$d->{name}]: host_key_check must be yes, accept-new or no\n"
+          unless $d->{host_key_check} =~ /^(yes|accept-new|no)$/;
     }
     return \@devices;
 }

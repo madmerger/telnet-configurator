@@ -3,6 +3,7 @@
 #
 #   bin/cbt-collect -i conf/devices.local.conf            # all devices
 #   bin/cbt-collect -i conf/devices.local.conf -d TKY-ENB-0001
+#   bin/cbt-collect -i conf/devices.local-ssh.conf         # over SSH (protocol = ssh)
 #
 # Output: OUTDIR/<device>/<device>_<YYYYmmdd-HHMMSS>.cfg and OUTDIR/<device>/latest.cfg
 use strict;
@@ -47,7 +48,9 @@ for my $dev (@$devices) {
     my $dir     = "$o{outdir}/$dev->{name}";
     my $file    = "$dir/$dev->{name}_$ts.cfg";
     make_path($dir);
-    printf "%-14s %-8s %-12s %s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw}, $dev->{host}, $dev->{port} || 23;
+    my $ssh = $dev->{protocol} eq 'ssh';
+    printf "%-18s %-8s %-12s %-12s %s:%s ... ", $dev->{name}, $dev->{model}, $dev->{sw},
+      ( $ssh ? "ssh/$dev->{auth}" : 'telnet' ), $dev->{host}, $dev->{port} || ( $ssh ? 22 : 23 );
 
     my $ok = eval {
         die "no collector for $key\n" unless $handler;
@@ -60,7 +63,15 @@ for my $dev (@$devices) {
             close $out;
         }
         else {
-            system( $^X, $handler->{script}, @{$dev}{qw(host port user password)}, $file ) == 0
+            my @opts = ( '--protocol', $dev->{protocol}, '--timeout', $o{timeout} );
+            if ($ssh) {
+                push @opts, '--auth', $dev->{auth};
+                for my $k (qw(key_file host_key_check known_hosts)) {
+                    push @opts, '--' . ( $k =~ tr/_/-/r ), $dev->{$k} if defined $dev->{$k};
+                }
+            }
+            local $ENV{CBT_COLLECT_PASSWORD} = $dev->{password} // '';    # not on the command line
+            system( $^X, $handler->{script}, @opts, '--', map( { $_ // '' } @{$dev}{qw(host port user)} ), '', $file ) == 0
               or die "collector script exited with status " . ( $? >> 8 ) . "\n";
         }
         1;
